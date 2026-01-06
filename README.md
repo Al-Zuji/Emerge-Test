@@ -1,13 +1,14 @@
 # 🛠 Autonomous Buggy – Control & Test Scripts
 
-This repository contains **low-level test and control scripts** used during the development of an **autonomous buggy system**.
+This repository contains low-level test and control scripts used during the development of an autonomous buggy system.
+The scripts are intended for hardware validation, manual control, and integration testing before higher-level autonomy (ROS 2) is enabled.
 
-These scripts are intended for:
-- Hardware bring-up and validation
-- Manual control and safety testing
-- Integration testing before higher-level autonomy (ROS 2)
-
-They form the **foundation layer** of the system and must be verified before any autonomous logic is enabled.
+The main focus areas are:
+- RS485 (Modbus RTU) communication
+- PLC control logic
+- Encoder feedback validation
+- Steering motor control
+- Joystick / keyboard based manual driving
 
 ====================================================================
 
@@ -17,17 +18,17 @@ SYSTEM OVERVIEW
 Hardware Components
 --------------------------------------------------------------------
 - PLC (Modbus RTU over RS485)
-- Wheel encoders (Modbus RTU)
-- Steering motor controller (RS232 / USB-Serial)
+- Wheel encoders (Modbus RTU over RS485)
+- Steering motor controller (Modbus RTU over RS485)
 - Game controller or keyboard
 - Jetson / PC (Linux or Windows)
 
 --------------------------------------------------------------------
 Communication Interfaces
 --------------------------------------------------------------------
-- RS485 → PLC and encoders
-- RS232 → Steering motor
+- RS485 → PLC, encoders, steering motor controller
 - USB   → Gamepad / Keyboard
+- PC/Jetson USB-Serial adapters → provide RS485 interface (ttyUSBx / COMx)
 
 ====================================================================
 
@@ -47,7 +48,7 @@ Always follow this sequence when setting up new hardware or debugging:
 4. steering_motor_test.py
    OR
    AV_Joystick_01.py
-   - Test steering motor only
+   - Test steering motor only (RS485 Modbus)
 
 5. BBW_control_limit.py
    - Full manual driving and monitoring
@@ -63,7 +64,7 @@ Purpose:
 
 Use this script FIRST when:
 - New wiring is installed
-- USB-RS485 adapter is changed
+- RS485 adapter is changed
 - Modbus communication is unstable
 
 Interface:
@@ -77,7 +78,7 @@ How It Works:
 Typical Parameters to Adjust:
 - Serial port (e.g. /dev/ttyUSB1 or COMx)
 - Baudrate
-- Stop bits
+- Stop bits / parity
 - Timeout
 
 Expected Result:
@@ -93,7 +94,7 @@ Purpose:
 - Read encoder values from the buggy system:
   - Left wheel
   - Right wheel
-  - Steering
+  - Steering (if encoder feedback exists)
   - BBW (if available)
 
 Used to verify:
@@ -121,91 +122,15 @@ Expected Result:
 
 ====================================================================
 
-3) BBW_control_limit.py
-------------------------------------------------------------
-
-Purpose:
-This is the MAIN manual control script.
-
-It integrates:
-- PLC control (enable, forward, reverse, stop)
-- Speed control via Modbus register writes
-- Steering control via serial communication
-- Encoder feedback monitoring
-- Gamepad input
-
-Interfaces:
-- RS485 → PLC and encoders
-- RS232 → Steering motor controller
-- USB   → Game controller
-
-How It Works:
-- Joystick buttons control PLC states
-- Left joystick controls vehicle speed
-- Right joystick controls steering angle
-- Encoder values are read continuously
-- Edge-trigger logic prevents command spamming
-
-Safety Logic:
-A mandatory stop sequence is enforced:
-
-STOP_ON → ENABLE_OFF → STOP_OFF
-
-Typical Parameters to Adjust:
-- Serial ports (PLC / encoders / steering)
-- Speed scaling limits
-- Joystick deadzones
-- Steering center value and speed
-- PLC coil and register addresses
-
-Expected Result:
-- Stable manual driving
-- Predictable steering and speed control
-- Live encoder feedback during motion
-
-====================================================================
-
-4) steering_motor_test.py
-------------------------------------------------------------
-
-Purpose:
-- Simple keyboard-based steering test
-- No PLC or joystick dependency
-
-Used to validate:
-- Steering motor operation
-- Serial communication
-- Steering center calibration
-
-Interface:
-- RS232 / USB-Serial steering controller
-
-How It Works:
-- Left arrow  → steer left
-- Right arrow → steer right
-- Key release → return to center
-
-Typical Parameters to Adjust:
-- Serial port
-- Baudrate
-- Steering speed
-- Center value (usually 127)
-
-Expected Result:
-- Immediate steering response
-- Automatic return to center
-
-====================================================================
-
-5) PLC_control_01.py
+3) PLC_control_01.py
 ------------------------------------------------------------
 
 Purpose:
 - Direct manual control of PLC outputs
-- Validate PLC logic independently
+- Validate PLC logic independently from joystick/autonomy
 
 Interface:
-- RS485 (PLC)
+- RS485 (Modbus RTU PLC)
 
 How It Works:
 - Single-character terminal commands
@@ -233,20 +158,43 @@ Expected Result:
 
 ====================================================================
 
-6) AV_Joystick_01.py
+4) steering_motor_test.py
 ------------------------------------------------------------
 
 Purpose:
-- Clean, Linux-friendly keyboard steering controller
-- Improved version of basic steering test
-
-Improvements:
-- Reduced serial traffic
-- No repeated command spamming
-- Guaranteed steering centering
+- Simple keyboard-based steering test
+- Steering motor only (no PLC, no joystick dependency)
 
 Interface:
-- RS232 / USB-Serial steering controller
+- RS485 (Modbus RTU steering controller)
+
+How It Works:
+- Sends steering command when key is pressed
+- Returns steering to center when key is released
+- Used to confirm steering response, direction, and centering
+
+Typical Parameters to Adjust:
+- Serial port (RS485 adapter)
+- Baudrate
+- Steering speed / step size
+- Center value / command range
+
+Expected Result:
+- Immediate steering response
+- Automatic return to center
+
+====================================================================
+
+5) AV_Joystick_01.py
+------------------------------------------------------------
+
+Purpose:
+- Clean keyboard steering controller (Linux friendly)
+- Reduced communication spam
+- Guaranteed centering on release or exit
+
+Interface:
+- RS485 (Modbus RTU steering controller)
 
 How It Works:
 - Supports arrow keys and A/D keys
@@ -255,14 +203,58 @@ How It Works:
 - Automatically centers steering on release or exit
 
 Typical Parameters to Adjust:
-- Serial port (e.g. /dev/ttyACM3)
-- Steering speed
+- Serial port (e.g. /dev/ttyUSBx)
+- Baudrate
+- Steering speed / step size
 - Center value
 
 Expected Result:
 - Smooth, jitter-free steering
-- Clean serial communication
+- Clean communication
 - Reliable centering behavior
+
+====================================================================
+
+6) BBW_control_limit.py
+------------------------------------------------------------
+
+Purpose:
+This is the MAIN manual control script.
+
+It integrates:
+- PLC control (enable, forward, reverse, stop)
+- Speed control via Modbus register writes
+- Steering control via RS485 Modbus
+- Encoder feedback monitoring
+- Gamepad input
+
+Interfaces:
+- RS485 → PLC, encoders, steering motor controller
+- USB   → Game controller
+
+How It Works:
+- Joystick buttons control PLC states
+- Left joystick controls vehicle speed
+- Right joystick controls steering angle
+- Encoder values are read continuously
+- Edge-trigger logic prevents command spamming
+
+Safety Logic:
+A mandatory stop sequence is enforced:
+
+STOP_ON → ENABLE_OFF → STOP_OFF
+
+Typical Parameters to Adjust:
+- Serial ports (PLC / encoders / steering)
+- Speed scaling limits
+- Joystick deadzones
+- Steering center value and speed
+- PLC coil and register addresses
+
+Expected Result:
+- Stable manual driving
+- Predictable steering and speed control
+- Live feedback during operation
 
 ====================================================================
 
