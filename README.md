@@ -1,184 +1,218 @@
 # 🛠 Autonomous Buggy – Control & Test Scripts
 
-This repository contains low-level test and control scripts used during the development of an autonomous buggy system.  
-The scripts are intended for hardware validation, manual control, and integration testing before higher-level autonomy (ROS 2) is enabled.
+This repository contains **low-level test and control scripts** used during the development of an **autonomous buggy system**.
 
-The focus is on:
-- RS485 (Modbus RTU) communication
-- PLC control logic
-- Encoder feedback validation
-- Steering motor control
-- Joystick / keyboard based manual driving
+These scripts are intended for:
+- Hardware bring-up and validation
+- Manual control and safety testing
+- Integration testing before higher-level autonomy (ROS 2)
 
---------------------------------------------------------------------
+They form the **foundation layer** of the system and must be verified before any autonomous logic is enabled.
+
+====================================================================
 
 SYSTEM OVERVIEW
 
-Hardware:
+--------------------------------------------------------------------
+Hardware Components
+--------------------------------------------------------------------
 - PLC (Modbus RTU over RS485)
 - Wheel encoders (Modbus RTU)
 - Steering motor controller (RS232 / USB-Serial)
 - Game controller or keyboard
 - Jetson / PC (Linux or Windows)
 
-Communication:
+--------------------------------------------------------------------
+Communication Interfaces
+--------------------------------------------------------------------
 - RS485 → PLC and encoders
 - RS232 → Steering motor
-- USB → Gamepad / Keyboard
+- USB   → Gamepad / Keyboard
 
---------------------------------------------------------------------
+====================================================================
 
 RECOMMENDED WORKFLOW ORDER
 
-1. ID_scan_rs485.py        → Detect Modbus slave IDs
-2. ENC_Buggy_test_01.py   → Verify encoder readings
-3. PLC_control_01.py      → Test PLC coil control
-4. steering_motor_test.py or AV_Joystick_01.py → Test steering only
-5. BBW_control_limit.py   → Full manual driving & monitoring
+Always follow this sequence when setting up new hardware or debugging:
 
---------------------------------------------------------------------
+1. ID_scan_rs485.py
+   - Detect Modbus slave IDs on RS485 bus
+
+2. ENC_Buggy_test_01.py
+   - Verify encoder data and direction
+
+3. PLC_control_01.py
+   - Test PLC coil logic and safety states
+
+4. steering_motor_test.py
+   OR
+   AV_Joystick_01.py
+   - Test steering motor only
+
+5. BBW_control_limit.py
+   - Full manual driving and monitoring
+
+====================================================================
 
 1) ID_scan_rs485.py
+------------------------------------------------------------
 
 Purpose:
-This script scans RS485 Modbus RTU slave addresses to identify which devices are responding.
-It is the first script to run when setting up new wiring, changing USB-RS485 adapters,
-or troubleshooting communication issues.
+- Scan RS485 Modbus RTU slave addresses
+- Identify which devices are responding
 
-Interfaces:
+Use this script FIRST when:
+- New wiring is installed
+- USB-RS485 adapter is changed
+- Modbus communication is unstable
+
+Interface:
 - RS485 (Modbus RTU)
 
-How it works:
-- Iterates through slave IDs (typically 1 to 16)
+How It Works:
+- Iterates through slave IDs (usually 1–16)
 - Sends a Modbus read request to a test register
-- Prints which slave IDs respond successfully
+- Prints responding slave IDs
 
-Typical parameters to adjust:
+Typical Parameters to Adjust:
 - Serial port (e.g. /dev/ttyUSB1 or COMx)
 - Baudrate
 - Stop bits
-- Timeout value
+- Timeout
 
-Expected result:
-- Terminal output shows active Modbus slave IDs
-- Confirms wiring and Modbus settings are correct
+Expected Result:
+- Active Modbus slave IDs are displayed
+- Confirms RS485 wiring and settings are correct
 
---------------------------------------------------------------------
+====================================================================
 
 2) ENC_Buggy_test_01.py
+------------------------------------------------------------
 
 Purpose:
-This script reads encoder values from the buggy system, including:
-- Left wheel encoder
-- Right wheel encoder
-- Steering encoder
-- BBW encoder (if applicable)
+- Read encoder values from the buggy system:
+  - Left wheel
+  - Right wheel
+  - Steering
+  - BBW (if available)
 
-It is used to verify correct encoder mapping, register addresses, and data sign.
+Used to verify:
+- Encoder slave ID mapping
+- Register addresses
+- Data sign and direction
 
-Interfaces:
+Interface:
 - RS485 (Modbus RTU encoders)
 
-How it works:
-- Reads encoder registers using Modbus
-- Converts raw 16-bit values into signed integers
-- Continuously prints live encoder values
+How It Works:
+- Reads encoder registers continuously
+- Converts raw 16-bit values to signed integers
+- Prints live encoder values to terminal
 
-Typical parameters to adjust:
-- Serial port (Windows COMx or Linux /dev/ttyUSBx)
+Typical Parameters to Adjust:
+- Serial port (COMx or /dev/ttyUSBx)
 - Encoder slave IDs
 - Encoder register addresses
 - Read interval (sleep time)
 
-Expected result:
-- Encoder values change smoothly when wheels or steering move
-- Negative and positive directions behave correctly
+Expected Result:
+- Smooth encoder updates
+- Correct positive and negative direction
 
---------------------------------------------------------------------
+====================================================================
 
 3) BBW_control_limit.py
+------------------------------------------------------------
 
 Purpose:
-This is the main manual control script.
-It integrates joystick input with:
-- PLC control (forward, reverse, enable, stop)
+This is the MAIN manual control script.
+
+It integrates:
+- PLC control (enable, forward, reverse, stop)
 - Speed control via Modbus register writes
 - Steering control via serial communication
 - Encoder feedback monitoring
+- Gamepad input
 
 Interfaces:
 - RS485 → PLC and encoders
 - RS232 → Steering motor controller
-- USB → Game controller
+- USB   → Game controller
 
-How it works:
-- Joystick buttons control PLC state (enable, forward, reverse, stop)
-- Left joystick controls speed (mapped to a Modbus holding register)
-- Right joystick controls steering (single-byte serial command)
-- Encoders are read continuously for monitoring
-- Edge-trigger logic prevents repeated command spamming
+How It Works:
+- Joystick buttons control PLC states
+- Left joystick controls vehicle speed
+- Right joystick controls steering angle
+- Encoder values are read continuously
+- Edge-trigger logic prevents command spamming
 
-Safety logic:
-A defined STOP sequence is always used:
+Safety Logic:
+A mandatory stop sequence is enforced:
+
 STOP_ON → ENABLE_OFF → STOP_OFF
 
-Typical parameters to adjust:
-- Serial ports for PLC, encoders, and steering
+Typical Parameters to Adjust:
+- Serial ports (PLC / encoders / steering)
 - Speed scaling limits
 - Joystick deadzones
 - Steering center value and speed
-- PLC coil addresses and register addresses
+- PLC coil and register addresses
 
-Expected result:
+Expected Result:
 - Stable manual driving
 - Predictable steering and speed control
-- Live encoder feedback during operation
+- Live encoder feedback during motion
 
---------------------------------------------------------------------
+====================================================================
 
 4) steering_motor_test.py
+------------------------------------------------------------
 
 Purpose:
-This script provides a simple keyboard-based steering test.
-It is used to validate the steering motor and serial communication
-without involving PLC logic or joystick input.
+- Simple keyboard-based steering test
+- No PLC or joystick dependency
 
-Interfaces:
+Used to validate:
+- Steering motor operation
+- Serial communication
+- Steering center calibration
+
+Interface:
 - RS232 / USB-Serial steering controller
 
-How it works:
-- Left arrow key steers left
-- Right arrow key steers right
-- Releasing keys returns steering to center
+How It Works:
+- Left arrow  → steer left
+- Right arrow → steer right
+- Key release → return to center
 
-Typical parameters to adjust:
+Typical Parameters to Adjust:
 - Serial port
 - Baudrate
 - Steering speed
 - Center value (usually 127)
 
-Expected result:
+Expected Result:
 - Immediate steering response
-- Steering returns to center when keys are released
+- Automatic return to center
 
---------------------------------------------------------------------
+====================================================================
 
 5) PLC_control_01.py
+------------------------------------------------------------
 
 Purpose:
-This script allows direct manual control of PLC outputs using keyboard input.
-It is used to validate PLC coil mapping and system logic independently
-from joystick or autonomous control.
+- Direct manual control of PLC outputs
+- Validate PLC logic independently
 
-Interfaces:
+Interface:
 - RS485 (PLC)
 
-How it works:
-- User types single-character commands in the terminal
-- Commands trigger Modbus coil writes (forward, reverse, stop, signals, horn)
+How It Works:
+- Single-character terminal commands
+- Sends Modbus coil write requests
 - Includes a safe STOP sequence
 
-Typical commands:
+Command List:
 - f → forward
 - r → reverse
 - s → stop
@@ -187,59 +221,66 @@ Typical commands:
 - h → horn
 - q → quit
 
-Typical parameters to adjust:
+Typical Parameters to Adjust:
 - Serial port
 - Baudrate
 - Coil addresses
 - Timing delays
 
-Expected result:
-- PLC responds correctly to each command
+Expected Result:
+- PLC responds correctly
 - System enters safe STOP state when required
 
---------------------------------------------------------------------
+====================================================================
 
 6) AV_Joystick_01.py
+------------------------------------------------------------
 
 Purpose:
-This is a cleaner, Linux-friendly keyboard steering controller.
-It improves basic steering tests by minimizing serial traffic
-and ensuring the steering always returns to center.
+- Clean, Linux-friendly keyboard steering controller
+- Improved version of basic steering test
 
-Interfaces:
+Improvements:
+- Reduced serial traffic
+- No repeated command spamming
+- Guaranteed steering centering
+
+Interface:
 - RS232 / USB-Serial steering controller
 
-How it works:
+How It Works:
 - Supports arrow keys and A/D keys
 - Tracks key press and release states
-- Sends steering commands only when output changes
+- Sends steering command only when output changes
 - Automatically centers steering on release or exit
 
-Typical parameters to adjust:
+Typical Parameters to Adjust:
 - Serial port (e.g. /dev/ttyACM3)
 - Steering speed
 - Center value
 
-Expected result:
+Expected Result:
 - Smooth, jitter-free steering
-- Reduced serial traffic
+- Clean serial communication
 - Reliable centering behavior
 
---------------------------------------------------------------------
+====================================================================
 
 DESIGN PHILOSOPHY
 
 - Test hardware in isolation before integration
-- Validate communication first, then control logic
-- Always provide a safe STOP state
+- Validate communication before control logic
+- Safety is always the highest priority
 - Avoid spamming Modbus or serial commands
-- Manual control is validated before autonomy is enabled
+- Manual control must be stable before autonomy
 
---------------------------------------------------------------------
+====================================================================
 
 NOTES FOR TEAM MEMBERS
 
-- Always verify serial ports using ls /dev/tty* (Linux) or Device Manager (Windows)
-- Run ID_scan_rs485.py after any wiring or hardware change
-- Do not start with BBW_control_limit.py on new hardware
+- Always verify serial ports using:
+  - Linux: ls /dev/tty*
+  - Windows: Device Manager
+- Run ID_scan_rs485.py after any wiring change
+- Do NOT start with BBW_control_limit.py on new hardware
 - Ensure STOP functionality is always accessible during testing
